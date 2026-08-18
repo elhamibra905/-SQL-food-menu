@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Order</title>
+</head>
+
+<body>
+
+    <h1>Add New Order</h1>
+
+    <form action="/admin/add" method="POST">
+
+        <div>
+            <label for="customer">Customer</label>
+            <input
+                type="text"
+                id="customer"
+                name="customer"
+                required
+            >
+        </div>
+
+        <div>
+            <label for="items">Food Items</label>
+            <input
+                type="text"
+                id="items"
+                name="items"
+                placeholder="Bruschetta x2, Ribeye Steak x1"
+                required
+            >
+        </div>
+
+        <div>
+            <label for="quantity">Quantity</label>
+            <input
+                type="number"
+                id="quantity"
+                name="quantity"
+                min="1"
+                required
+            >
+        </div>
+
+        <div>
+            <label for="total_price">Total Price</label>
+            <input
+                type="number"
+                id="total_price"
+                name="total_price"
+                step="0.01"
+                min="0"
+                required
+            >
+        </div>
+
+        <button type="submit">
+            Add Order
+        </button>
+
+    </form>
+
+</body>
+</html>
