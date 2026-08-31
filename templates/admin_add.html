@@ -1,66 +1,120 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Add Order</title>
-</head>
 
-<body>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='admin.css') }}"
+    />
+  </head>
 
-    <h1>Add New Order</h1>
+  <body>
+    <header class="admin-header">
+      <h1>Hotel Admin</h1>
 
-    <form action="/admin/add" method="POST">
+      <nav class="admin-nav">
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/add">Add Order</a>
+        <a href="/">Menu</a>
+      </nav>
+    </header>
 
-        <div>
-            <label for="customer">Customer</label>
+    <main class="admin-container">
+
+      <a href="/admin/dashboard" class="back-link">
+        ← Back to Orders
+      </a>
+
+      <div class="page-header">
+        <h2>Add New Order</h2>
+
+        <p>Manually create an order for a customer.</p>
+      </div>
+
+      <div class="form-card">
+
+        <form id="addOrderForm">
+
+          <div class="form-group">
+            <label for="customer">
+              Customer
+            </label>
+
             <input
-                type="text"
-                id="customer"
-                name="customer"
-                required
-            >
-        </div>
+              type="text"
+              id="customer"
+              name="customer"
+              placeholder="Enter customer name"
+              required
+            />
+          </div>
 
-        <div>
-            <label for="items">Food Items</label>
+          <div class="form-group">
+            <label for="items">
+              Food Items
+            </label>
+
+            <textarea
+              id="items"
+              name="items"
+              placeholder="Example: Classic Bruschetta x2, Ribeye Steak x1"
+              required
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="quantity">
+              Quantity
+            </label>
+
             <input
-                type="text"
-                id="items"
-                name="items"
-                placeholder="Bruschetta x2, Ribeye Steak x1"
-                required
-            >
-        </div>
+              type="number"
+              id="quantity"
+              name="quantity"
+              min="1"
+              placeholder="Enter quantity"
+              required
+            />
+          </div>
 
-        <div>
-            <label for="quantity">Quantity</label>
+          <div class="form-group">
+            <label for="total_price">
+              Total Price
+            </label>
+
             <input
-                type="number"
-                id="quantity"
-                name="quantity"
-                min="1"
-                required
-            >
-        </div>
+              type="number"
+              id="total_price"
+              name="total_price"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              required
+            />
+          </div>
 
-        <div>
-            <label for="total_price">Total Price</label>
-            <input
-                type="number"
-                id="total_price"
-                name="total_price"
-                step="0.01"
-                min="0"
-                required
-            >
-        </div>
+          <p id="errorMessage" class="error-message"></p>
 
-        <button type="submit">
+          <button
+            type="submit"
+            class="btn-submit"
+          >
             Add Order
-        </button>
+          </button>
 
-    </form>
+        </form>
 
-</body>
+      </div>
+
+    </main>
+
+    <script
+      src="{{ url_for('static', filename='js/admin-add.js') }}"
+    ></script>
+
+  </body>
 </html>

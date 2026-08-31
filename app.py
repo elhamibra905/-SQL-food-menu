@@ -1,69 +1,255 @@
 from flask import Flask, redirect, render_template, jsonify, request
-from orders import db, Order
+from orders import db, Order,Admin
+from werkzeug.security import check_password_hash
+from functools import wraps
+import jwt
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
+
+app.config["JWT_SECRET_KEY"] = "abcdefg"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///orders.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
+def admin_required(f):
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return jsonify({
+                "error": "Authorization token is required"
+            }), 401
+
+        try:
+            token = auth_header.split(" ")[1]
+
+            payload = jwt.decode(
+                token,
+                app.config["JWT_SECRET_KEY"],
+                algorithms=["HS256"]
+            )
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({
+                "error": "Token has expired"
+            }), 401
+
+        except jwt.InvalidTokenError:
+            return jsonify({
+                "error": "Invalid token"
+            }), 401
+
+        if payload.get("role") != "admin":
+            return jsonify({
+                "error": "Admin permission required"
+            }), 403
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
+@app.route("/admin/login")
+def admin_login_page():
+    return render_template("admin_login.html")
+@app.route("/admin/dashboard")
+def admin_dashboard():
+    return render_template("admin_dashboard.html")
 @app.route("/cart.html")
 def cart():
     return render_template("cart.html")
 
-@app.route("/admin/orders")
-def admin_orders():
-    orders = Order.query.all()
-    return render_template("admin_orders.html", orders=orders)
+@app.route("/order-status")
+def order_status():
+    return render_template("order-status.html")
 
-@app.route("/admin/orders/<int:order_id>/cancel", methods=["POST"])
-def cancel_order(order_id):
-    order = Order.query.get_or_404(order_id)
+@app.route("/api/admin/orders/<int:order_id>/status", methods=["PATCH"])
+@admin_required
+def update_order_status(order_id):
+    order = db.session.get(Order, order_id)
 
-    order.status = "cancelled"
+    if not order:
+        return jsonify({
+            "error": "Order not found"
+        }), 404
+
+    data = request.get_json()
+
+    status = data.get("status")
+
+    allowed_statuses = [
+        "pending",
+        "preparing",
+        "completed",
+        "cancelled"
+    ]
+
+    if status not in allowed_statuses:
+        return jsonify({
+            "error": "Invalid order status"
+        }), 400
+
+    order.status = status
 
     db.session.commit()
 
-    return redirect("/admin/orders")
+    return jsonify({
+        "message": "Order status updated successfully",
+        "order": {
+            "id": order.id,
+            "status": order.status
+        }
+    }), 200
 
-@app.route("/admin/orders/<int:order_id>/delete", methods=["POST"])
+
+@app.route("/api/admin/orders/<int:order_id>", methods=["DELETE"])
+@admin_required
 def delete_order(order_id):
-    order = Order.query.get_or_404(order_id)
+    order = db.session.get(Order, order_id)
+
+    if order is None:
+        return jsonify({
+            "error": f"No order found with ID {order_id}"
+        }), 404
 
     db.session.delete(order)
     db.session.commit()
 
-    return redirect("/admin/orders")
+    return jsonify({
+        "message": "Order deleted successfully"
+    }), 200
 
-@app.route("/admin/add", methods=["GET", "POST"])
-def admin_add():
-    if request.method == "POST":
-        customer = request.form.get("customer")
-        items = request.form.get("items")
-        quantity = request.form.get("quantity")
-        total_price = request.form.get("total_price")
+@app.route("/api/orders/<int:order_id>", methods=["GET"])
+def get_order(order_id):
 
-        if not customer or not items or not quantity or not total_price:
-            return "All fields are required", 400
+    order = db.session.get(Order, order_id)
 
-        order = Order(
-            customer=customer,
-            items=items,
-            quantity=int(quantity),
-            total_price=float(total_price)
-        )
+    if order is None:
+        return jsonify({
+            "error": "Order not found"
+        }), 404
 
-        db.session.add(order)
-        db.session.commit()
+    return jsonify({
+        "id": order.id,
+        "customer": order.customer,
+        "items": order.items,
+        "quantity": order.quantity,
+        "total_price": order.total_price,
+        "created_at": order.created_at.isoformat(),
+        "status": order.status
+    })
 
-        return redirect("/admin/orders")
-
+@app.route("/admin/add")
+def admin_add_page():
     return render_template("admin_add.html")
+
+@app.route("/api/admin/orders", methods=["POST"])
+@admin_required
+def admin_create_order():
+    data = request.get_json()
+
+    customer = data.get("customer")
+    items = data.get("items")
+    quantity = data.get("quantity")
+    total_price = data.get("total_price")
+
+    if not customer or not items or not quantity or total_price is None:
+        return jsonify({
+            "error": "Missing required order information"
+        }), 400
+
+    try:
+        quantity = int(quantity)
+        total_price = float(total_price)
+    except (ValueError, TypeError):
+        return jsonify({
+            "error": "Quantity and total price must be valid numbers"
+        }), 400
+
+    order = Order(
+        customer=customer,
+        items=items,
+        quantity=quantity,
+        total_price=total_price
+    )
+
+    db.session.add(order)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order created successfully",
+        "order": {
+            "id": order.id,
+            "customer": order.customer,
+            "items": order.items,
+            "quantity": order.quantity,
+            "total_price": order.total_price,
+            "status": order.status
+        }
+    }), 201
+
+@app.route("/api/orders", methods=["POST"])
+def create_order():
+    data = request.get_json()
+
+    customer = data.get("customer")
+    items = data.get("items")
+    quantity = data.get("quantity")
+    total_price = data.get("total_price")
+
+    if not customer or not items or not quantity or total_price is None:
+        return jsonify({
+            "error": "Missing required order information"
+        }), 400
+
+    order = Order(
+        customer=customer,
+        items=items,
+        quantity=quantity,
+        total_price=total_price
+    )
+
+    db.session.add(order)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order created successfully",
+        "order": {
+            "id": order.id,
+            "customer": order.customer,
+            "items": order.items,
+            "quantity": order.quantity,
+            "total_price": order.total_price,
+            "status": order.status
+        }
+    }), 201
+
+
+@app.route("/api/admin/orders", methods=["GET"])
+@admin_required
+def get_orders():
+    orders = Order.query.all()
+
+    return jsonify([
+        {
+            "id": order.id,
+            "customer": order.customer,
+            "items": order.items,
+            "quantity": order.quantity,
+            "total_price": order.total_price,
+            "created_at": order.created_at.isoformat(),
+            "status": order.status
+        }
+        for order in orders
+    ])
 
 @app.route("/api/menu")
 def get_menu():
@@ -150,59 +336,46 @@ def get_menu():
         }
     ])
 
-
-@app.route("/api/orders", methods=["POST"])
-def create_order():
+@app.route("/api/auth/admin/login", methods=["POST"])
+def admin_login():
     data = request.get_json()
 
-    customer = data.get("customer")
-    items = data.get("items")
-    quantity = data.get("quantity")
-    total_price = data.get("total_price")
+    username = data.get("username")
+    password = data.get("password")
 
-    if not customer or not items or not quantity or total_price is None:
+    if not username or not password:
         return jsonify({
-            "error": "Missing required order information"
+            "error": "Username and password are required"
         }), 400
 
-    order = Order(
-        customer=customer,
-        items=items,
-        quantity=quantity,
-        total_price=total_price
-    )
+    admin = Admin.query.filter_by(username=username).first()
 
-    db.session.add(order)
-    db.session.commit()
+    if not admin:
+        return jsonify({
+            "error": "Invalid username or password"
+        }), 401
+
+    if not check_password_hash(admin.password_hash, password):
+        return jsonify({
+            "error": "Invalid username or password"
+        }), 401
+
+    token = jwt.encode(
+    {
+        "admin_id": admin.id,
+        "role": admin.role,
+        "exp": datetime.utcnow() + timedelta(hours=1)
+    },
+    app.config["JWT_SECRET_KEY"],
+    algorithm="HS256"
+)
 
     return jsonify({
-        "message": "Order created successfully",
-        "order": {
-            "id": order.id,
-            "customer": order.customer,
-            "items": order.items,
-            "quantity": order.quantity,
-            "total_price": order.total_price,
-            "status": order.status
-        }
-    }), 201
+    "message": "Login successful",
+    "token": token
+     }), 200
 
-@app.route("/api/orders", methods=["GET"])
-def get_orders():
-    orders = Order.query.all()
 
-    return jsonify([
-        {
-            "id": order.id,
-            "customer": order.customer,
-            "items": order.items,
-            "quantity": order.quantity,
-            "total_price": order.total_price,
-            "created_at": order.created_at.isoformat(),
-            "status": order.status
-        }
-        for order in orders
-    ])
 
 if __name__ == "__main__":
     with app.app_context():
